@@ -338,31 +338,19 @@ class ShapeLibrary(object):
         wcorrs = sinfo1.wcorrs[shape2]
         xi = sinfo1.xi
 
-        Q = -1.0 * np.hstack((2*gamma*xi, wcorrs))
-        A = np.zeros((shape1.n_patches, shape1.n_segments))
-        for i, patch in enumerate(shape1.patches):
-            for j, segment in enumerate(shape1.segments):
-                if patch in segment.patches:
-                    A[i][j] = 1.0
-        A = np.hstack((A, np.zeros((shape1.n_patches, shape1.n_segments *
-            shape2.n_segments))))
-        A = li_matrix(A)
-        B = np.ones((A.shape[0], 1))
-        G, H = self._create_GH2(shape1, shape2)
-        P = gamma * np.eye(Q.shape[0])
-        for i in range(shape1.n_segments, P.shape[0]):
-            P[i][i] = 0.0
-        As = sp.coo_matrix(A)
-        Gs = sp.coo_matrix(G)
-        Ps = sp.coo_matrix(P)
-        Q = cvx.matrix(Q)
-        B = cvx.matrix(B)
-        H = cvx.matrix(H)
-        A = cvx.spmatrix(As.data.tolist(), As.row.tolist(), As.col.tolist(), size=A.shape)
-        G = cvx.spmatrix(Gs.data.tolist(), Gs.row.tolist(), Gs.col.tolist(), size=G.shape)
-        P = cvx.spmatrix(Ps.data.tolist(), Ps.row.tolist(), Ps.col.tolist(), size=P.shape)
 
-        sol = cvx.solvers.qp(P,Q,G,H, A, B)
+        A, B = self._create_AB2(shape1, shape2)
+        G, H = self._create_GH2(shape1, shape2)
+
+        Q = cvx.matrix(-1.0 * np.hstack((2*gamma*xi, wcorrs)))
+        qs = xi.shape[0] + wcorrs.shape[0]
+
+        px = [gamma for i in range(shape1.n_segments)]
+        pr = range(shape1.n_segments)
+        pc = range(shape1.n_segments)
+        P = cvx.spmatrix(px, pr, pc, size=(qs, qs))
+
+        sol = cvx.solvers.qp(P,Q,G,H,A,B)
         x = np.squeeze(np.array(sol['x']))
 
         sinfo1.xijs[shape2] = x[0:shape1.n_segments]
@@ -450,47 +438,85 @@ class ShapeLibrary(object):
 
         return A, B
 
+    def _create_AB2(self, shape1, shape2):
+        """Asdf
+        """
+        A = np.zeros((shape1.n_patches, shape1.n_segments))
+        for i, patch in enumerate(shape1.patches):
+            for j, segment in enumerate(shape1.segments):
+                if patch in segment.patches:
+                    A[i][j] = 1.0
+        A = li_matrix(A)
+
+        ax = []
+        ar = []
+        ac = []
+
+        for i in range(A.shape[0]):
+            for j in range(A.shape[1]):
+                if A[i][j] == 1.0:
+                    ax.append(1.0)
+                    ar.append(i)
+                    ac.append(j)
+
+        aheight = A.shape[0]
+        A = cvx.spmatrix(ax, ar, ac, size=(aheight, shape1.n_segments + shape1.n_segments * shape2.n_segments))
+        B = cvx.matrix(np.ones((aheight, 1)))
+
+        return A, B
+
     def _create_GH2(self, shape1, shape2):
         sx1 = shape1.n_segments
         sx2 = shape2.n_segments
         sy = sx1*sx2
         xji = self._shape_info[shape2].xijs[shape1]
 
-        rowx12 = np.hstack((
-            np.eye(sx1), np.zeros((sx1, sy))
-        ))
-        rowy12 = np.hstack((
-            np.zeros((sy, sx1)), np.eye(sy)
-        ))
+        # G is of width (sx1 + sxy), height (2*sx1 + 2*sy + sx1 + sy)
+        gx = []
+        gr = []
+        gc = []
 
-        blocky12 = np.zeros((sx1, sy))
-        start_pt = 0
+        rs = 0 # row start value
+
+        # Create constraint for 0 <= x_ij <= 1
+        for value in [-1.0, 1.0]:
+            for i in range(sx1):
+                gx.append(value)
+                gr.append(rs + i)
+                gc.append(i)
+            rs += sx1
+
+        # Create constraint for 0 <= y_ij <= 1
+        for value in [-1.0, 1.0]:
+            for i in range(sy):
+                gx.append(value)
+                gr.append(rs + i)
+                gc.append(sx1 + i)
+            rs += sy
+
+        # Create constraint (sum over s') y_ij(s, s') <= x_ij_s
         for i in range(sx1):
-            for j in range(start_pt, start_pt + sx2):
-                blocky12[i][j] = 1
-            start_pt += sx2
+            gx.append(-1.0)
+            gr.append(rs + i)
+            gc.append(i)
+            for j in range(sx2*i, sx2*(i+1)):
+                gx.append(1.0)
+                gr.append(rs + i)
+                gc.append(sx1 + j)
+        rs += sx1
 
-        rowblk12 = np.hstack((
-            -1*np.eye(sx1), blocky12
-        ))
+        # Create constraint sum
+        for i in range(sy):
+            gx.append(1.0)
+            gr.append(rs + i)
+            gc.append(sx1 + i)
 
-        rowend12 = np.hstack((
-            np.zeros((sy, sx1)), np.eye(sy)
-        ))
+        G = cvx.spmatrix(gx, gr, gc, size=(3*sx1 + 3*sy, sx1 + sy))
 
-        G = np.vstack((
-            -1*rowx12,
-            rowx12,
-            -1*rowy12,
-            rowy12,
-            rowblk12,
-            rowend12
-        ))
-
-        xijcol = np.zeros((sy, 1))
+        xjicol = np.zeros((sy, 1))
         for i in range(sy):
             ind = i % sx2
-            xijcol[i][0] = xji[ind]
+            xjicol[i][0] = xji[ind]
 
         H = np.vstack((
             np.zeros((sx1, 1)),
@@ -498,8 +524,10 @@ class ShapeLibrary(object):
             np.zeros((sy, 1)),
             np.ones((sy, 1)),
             np.zeros((sx1, 1)),
-            xijcol
+            xjicol
         ))
+
+        H = cvx.matrix(H)
 
         return G, H
 
@@ -594,10 +622,10 @@ class ShapeLibrary(object):
         return G, H
 
 def main():
-    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 25)]
+    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 23)]
     meshes = [OffFile(f).read() for f in filenames]
 
-    sl = ShapeLibrary(meshes, n_segmentations=20)
+    sl = ShapeLibrary(meshes, n_segmentations=1)
     #sl.pairwise_joint_segmentation(sl.shapes[0], sl.shapes[1])
 
     gammas = [0.001, 0.1, 1, 100, 10000]
