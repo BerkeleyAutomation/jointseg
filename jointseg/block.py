@@ -116,6 +116,7 @@ class ShapeInfo(object):
         self._shape = shape
         self._xi = np.zeros(shape.n_segments)
         self._xijs = {s : np.zeros(shape.n_segments) for s in shapes if s !=shape}
+        self._new_xijs = {s : np.zeros(shape.n_segments) for s in shapes if s != shape}
         self._yijs = {s : np.zeros(shape.n_segments * s.n_segments) for s in shapes if s != shape}
         self._wseg = self._compute_wseg()
         self._wcorrs = self._compute_wcorrs(shapes, seg_to_seg_dists, sigma)
@@ -142,7 +143,15 @@ class ShapeInfo(object):
 
     @xijs.setter
     def xijs(self, xij):
-        self._xijs = new_xij
+        self._xijs = xij
+
+    @property
+    def new_xijs(self):
+        return self._new_xijs
+
+    @new_xijs.setter
+    def new_xijs(self, xij):
+        self._new_xijs = xij
 
     @property
     def yijs(self):
@@ -151,6 +160,10 @@ class ShapeInfo(object):
     @yijs.setter
     def yijs(self, yij):
         self._yijs = yij
+
+    def propagate_xijs(self):
+        for key, new_xij in self.new_xijs.iteritems():
+            self.xijs[key] = np.copy(new_xij)
 
     def _compute_wseg(self):
         weights = []
@@ -339,7 +352,6 @@ class ShapeLibrary(object):
         wcorrs = sinfo1.wcorrs[shape2]
         xi = sinfo1.xi
 
-
         A, B = self._create_AB2(shape1, shape2)
         G, H = self._create_GH2(shape1, shape2)
 
@@ -354,9 +366,14 @@ class ShapeLibrary(object):
         sol = cvx.solvers.qp(P,Q,G,H,A,B, solver='glpk')
         x = np.squeeze(np.array(sol['x']))
 
-        sinfo1.xijs[shape2] = x[0:shape1.n_segments]
+        sinfo1.new_xijs[shape2] = x[0:shape1.n_segments]
         sinfo1.yijs[shape2] = x[shape1.n_segments:]
-        self.round_xijs(shape1, shape2)
+        self.round_new_xijs(shape1, shape2)
+
+    def _propagate_xijs(self):
+        for shape in self.shapes:
+            sinfo = self._shape_info[shape]
+            sinfo.propagate_xijs()
 
     def round_xi(self, shape):
         si = self._shape_info[shape]
@@ -380,9 +397,9 @@ class ShapeLibrary(object):
                     new_segset.append(segtup)
             segset = new_segset
 
-    def round_xijs(self, shape1, shape2):
+    def round_new_xijs(self, shape1, shape2):
         si = self._shape_info[shape1]
-        xij = si.xijs[shape2]
+        xij = si.new_xijs[shape2]
         segset = zip(shape1.segments, [x for x in range(shape1.n_segments)], xij)
         while len(segset) > 0:
             max_segtup = max(segset, key=lambda x : x[2])
@@ -401,7 +418,7 @@ class ShapeLibrary(object):
                 else:
                     new_segset.append(segtup)
             segset = new_segset
-        si.xijs[shape2] = xij
+        si.new_xijs[shape2] = xij
 
     def _round_and_show(self):
         for shape in self.shapes:
@@ -647,7 +664,7 @@ class ShapeLibrary(object):
         return G, H
 
 def main():
-    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 31)]
+    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 23)]
     meshes = [OffFile(f).read() for f in filenames]
 
     sl = ShapeLibrary(meshes, n_segmentations=1)
@@ -665,6 +682,7 @@ def main():
             for os in sl.shapes:
                 if s != os:
                     sl._run_joint_opt(s, os, gamma)
+        sl._propagate_xijs()
 
     sl._round_and_show()
 
