@@ -321,7 +321,7 @@ class ShapeLibrary(object):
         sol = cvx.solvers.qp(P,Q,G,H, A, B, solver='glpk')
         x = np.squeeze(np.array(sol['x']))
         shape_info.xi = x
-        #self.round_xi(shape)
+        self.round_xi(shape)
         print shape_info.xi
 
     def _init_xijs(self):
@@ -355,6 +355,7 @@ class ShapeLibrary(object):
 
         sinfo1.xijs[shape2] = x[0:shape1.n_segments]
         sinfo1.yijs[shape2] = x[shape1.n_segments:]
+        self.round_xijs(shape1, shape2)
 
     def round_xi(self, shape):
         si = self._shape_info[shape]
@@ -377,6 +378,29 @@ class ShapeLibrary(object):
                 else:
                     new_segset.append(segtup)
             segset = new_segset
+
+    def round_xijs(self, shape1, shape2):
+        si = self._shape_info[shape1]
+        xij = si.xijs[shape2]
+        segset = zip(shape1.segments, [x for x in range(shape1.n_segments)], xij)
+        while len(segset) > 0:
+            max_segtup = max(segset, key=lambda x : x[2])
+            seg = max_segtup[0]
+            index = max_segtup[1]
+            xij[index] = 1.0
+
+            new_segset = []
+            for segtup in segset:
+                other_seg = segtup[0]
+                other_index = segtup[1]
+                if other_seg == seg:
+                    continue
+                elif other_seg.intersects(seg):
+                    xij[other_index] = 0.0
+                else:
+                    new_segset.append(segtup)
+            segset = new_segset
+        si.xijs[shape2] = xij
 
     def _round_and_show(self):
         for shape in self.shapes:
@@ -622,13 +646,13 @@ class ShapeLibrary(object):
         return G, H
 
 def main():
-    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 23)]
+    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 31)]
     meshes = [OffFile(f).read() for f in filenames]
 
     sl = ShapeLibrary(meshes, n_segmentations=1)
     #sl.pairwise_joint_segmentation(sl.shapes[0], sl.shapes[1])
 
-    gammas = [0.001, 0.1, 1, 100, 10000]
+    gammas = [0.001, 0.01, 0.1, 1, 10, 100, 1000, 10000]
 
     for s in sl.shapes:
         sl._run_ss_opt(s, 0.0001)
