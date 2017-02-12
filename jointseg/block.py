@@ -9,6 +9,8 @@ from visualization import Visualizer3D
 from segmentation import Shape
 from color_picker import indexed_color
 
+cvx.solvers.options['glpk'] = {'msg_lev' : 'GLP_MSG_OFF'}
+
 def li_matrix(A):
     rref, rowinds = Matrix(A.T).rref()
     rows = []
@@ -309,8 +311,7 @@ class ShapeLibrary(object):
         B = np.ones((A.shape[0], 1))
         G = np.vstack((-1.0*np.eye(shape.n_segments), np.eye(shape.n_segments)))
         H = np.vstack((np.zeros((shape.n_segments, 1)), np.ones((shape.n_segments, 1))))
-        nj = len(shape_info.xijs.keys())
-        x = -1.0*gamma*len(self.shapes) / (len(self.shapes)**2)*nj*2
+        x = -1.0*gamma*len(self.shapes) / (len(self.shapes)**2)*2
         P = -1.0 * x * np.eye(shape.n_segments)
         Q = cvx.matrix(Q)
         A = cvx.matrix(A)
@@ -350,7 +351,7 @@ class ShapeLibrary(object):
         pc = range(shape1.n_segments)
         P = cvx.spmatrix(px, pr, pc, size=(qs, qs))
 
-        sol = cvx.solvers.qp(P,Q,G,H,A,B)
+        sol = cvx.solvers.qp(P,Q,G,H,A,B, solver='glpk')
         x = np.squeeze(np.array(sol['x']))
 
         sinfo1.xijs[shape2] = x[0:shape1.n_segments]
