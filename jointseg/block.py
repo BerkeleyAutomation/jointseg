@@ -9,7 +9,7 @@ from visualization import Visualizer3D
 from segmentation import Shape
 from color_picker import indexed_color
 
-cvx.solvers.options['glpk'] = {'msg_lev' : 'GLP_MSG_OFF'}
+cvx.solvers.options['show_progress'] = False
 
 def li_matrix(A):
     rref, rowinds = Matrix(A.T).rref()
@@ -319,7 +319,7 @@ class ShapeLibrary(object):
         G = cvx.matrix(G)
         H = cvx.matrix(H)
         P = cvx.matrix(P)
-        sol = cvx.solvers.qp(P,Q,G,H, A, B, solver='glpk')
+        sol = cvx.solvers.qp(P,Q,G,H,A,B,solver='glpk')
         x = np.squeeze(np.array(sol['x']))
         shape_info.xi = x
         self.round_xi(shape)
