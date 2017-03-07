@@ -16,7 +16,7 @@ class D2Descriptor(object):
     thinness or thickness along a particular dimension.
     """
 
-    def __init__(self, mesh, n_samples=1024**2, n_bins=1024, n_verts=64, verts=None, evals=None):
+    def __init__(self, mesh, n_samples=1024**2, n_verts=128, verts=None, evals=None):
         """Create a D2 shape descriptor for the given mesh.
 
         Parameters
@@ -44,7 +44,6 @@ class D2Descriptor(object):
         """
         self._mesh = mesh
         self._n_samples = n_samples
-        self._n_bins = n_bins
         self._n_verts = n_verts
         self._orig_evals = evals
 
@@ -87,22 +86,16 @@ class D2Descriptor(object):
         eig_diff = np.linalg.norm(self._orig_evals - other._orig_evals)
 
         min_dist = np.infty
-        for j in range(self._verts.shape[0]):
-            dist = 0.0
-            for i in range(self._n_verts - 1):
-                lower = self._verts[j][i] - other._verts[j][i]
-                upper = self._verts[j][i+1] - other._verts[j][i+1]
-                area = 0.0
-                if (lower * upper >= 0):
-                    area = np.abs((lower + upper) / 2.0)
-                else:
-                    zero = lower / (lower - upper)
-                    area = zero*np.abs(lower/2.0) + (1-zero)*np.abs(upper/2.0)
-                dist += area
+        for i in range(self._verts.shape[0]):
+            delta = self._verts[i] - other._verts[i]
+            dist = np.dot(delta, delta)
             if dist < min_dist:
                 min_dist = dist
         min_dist = np.sqrt(min_dist**2 + 0.1*eig_diff**2)
         return min_dist
+
+        delta = self._verts[0] - other._verts[0]
+        return np.dot(delta, delta)
 
     def _compute_histogram(self):
         """Compute the vertices for this D2 descriptor via sampling and
@@ -111,31 +104,25 @@ class D2Descriptor(object):
         self._verts = []
 
         o1_mesh = self._mesh.copy()
-        #o2_mesh = self._mesh.copy()
-        #o3_mesh = self._mesh.copy()
+        o2_mesh = self._mesh.copy()
+        o3_mesh = self._mesh.copy()
         self._orig_evals = o1_mesh.scale_principal_eigenvalues([1.0])
-        #o2_mesh.scale_principal_eigenvalues([1.0, 1.0])
-        #o3_mesh.scale_principal_eigenvalues([1.0, 1.0, 1.0])
+        o2_mesh.scale_principal_eigenvalues([1.0, 1.0])
+        o3_mesh.scale_principal_eigenvalues([1.0, 1.0, 1.0])
 
-        #meshes = [o1_mesh, o2_mesh, o3_mesh]
-        meshes = [o1_mesh]
+        meshes = [o1_mesh, o2_mesh, o3_mesh]
 
         for m in meshes:
-            verts = np.zeros(self._n_verts)
-            first_set = m.random_points(self._n_samples)
-            second_set = m.random_points(self._n_samples)
-
+            first_set = self._mesh.random_points(self._n_samples)
+            second_set = self._mesh.random_points(self._n_samples)
             dists = []
             for i in range(self._n_samples):
                 dist = np.linalg.norm(first_set[i] - second_set[i])
                 dists.append(dist)
 
-            hist, bins = np.histogram(dists, bins=self._n_bins)
-            bins_per_vert = self._n_bins / self._n_verts
-            for i in range(self._n_verts):
-                verts[i] = np.mean(hist[i*bins_per_vert:(i+1)*bins_per_vert])
+            hist, bins = np.histogram(dists, bins=self._n_verts)
+            s = float(sum(hist))
+            self._verts.append(hist / s)
 
-            s = sum(verts)
-            self._verts.append(verts / s)
         self._verts = np.array(self._verts)
 
