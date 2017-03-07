@@ -2,10 +2,9 @@
 File for processing random mesh segmentations.
 Author: Matthew Matl
 """
-from meshpy import OffFile
-
 import heapq
 import math
+import os
 
 import numpy as np
 import networkx as nx
@@ -16,6 +15,8 @@ from visualization import Visualizer3D
 from meshpy import Mesh3D
 
 from d2_descriptor import D2Descriptor
+from descriptor_file import DescriptorFile
+import seg_file
 from color_picker import indexed_color
 
 # Disable output from CVX solvers
@@ -1222,8 +1223,6 @@ class MeshSegment(object):
         self._tri_inds = tri_inds
         self._mesh = MeshSegment._create_mesh(orig_mesh, tri_inds)
         self._d2_descriptor = d2_descriptor
-        if self._d2_descriptor is None:
-            self._d2_descriptor = D2Descriptor(self._mesh, n_samples=10000)
 
     @property
     def mesh(self):
@@ -1243,6 +1242,20 @@ class MeshSegment(object):
         """:obj:`D2Descriptor` : A D2 descriptor for the segment.
         """
         return self._d2_descriptor
+
+    @d2_descriptor.setter
+    def d2_descriptor(self, d2_descriptor):
+        self._d2_descriptor = d2_descriptor
+
+    def compute_d2_descriptor(self, n_samples=10000):
+        """Compute the D2 Descriptor for the segment.
+
+        Parameters
+        ----------
+        n_samples : int
+            The number of samples to use in the D2 descriptor.
+        """
+        self.d2_descriptor = D2Descriptor(self._mesh, n_samples=n_samples)
 
     def show(self, color=(0.5, 0.5, 0.5)):
         """Render the 3D mesh for the segment using mayavi.
@@ -1281,6 +1294,12 @@ class MeshSegmentation(object):
         self._segments = segments
 
     @property
+    def mesh(self):
+        """:obj:`meshpy.Mesh3D` : The 3D mesh that this segment was created from.
+        """
+        return self._mesh
+
+    @property
     def segments(self):
         """segments : :obj:`list` of :obj:`MeshSegment` :
         A list of MeshSegments that cover the original mesh.
@@ -1294,6 +1313,56 @@ class MeshSegmentation(object):
         for i, segment in enumerate(self.segments):
             Visualizer3D.mesh(segment.mesh, style='surface', color=indexed_color(i))
         Visualizer3D.show()
+
+    def write(self, seg_filename, descriptor_dir=None):
+        """Write the MeshSegmentation out to a file.
+
+        Parameters
+        ----------
+        seg_filename : :obj:`str`
+            The path of the .seg file, which will contain a segment id
+            for each face.
+
+        descriptor_dir : :obj:`str`
+            If not None, a directory in which descriptor files for each segment
+            can be cached.
+        """
+        seg_file.SegFile(seg_filename).write(self)
+        if descriptor_dir is not None:
+            for i, seg in enumerate(self.segments):
+                filename = os.path.join(descriptor_dir, '{}.d2'.format(i))
+                DescriptorFile(filename).write(seg.d2_descriptor)
+
+    @staticmethod
+    def load(mesh, seg_filename, descriptor_dir=None):
+        """Read in a MeshSegmentation from a file.
+
+        Parameters
+        ----------
+        seg_filename : :obj:`str`
+            The path of the .seg file, which contains a segment id
+            for each face.
+
+        descriptor_dir : :obj:`str`
+            If not None, a directory in which descriptor files for each segment
+            have been cached. They are named with the approriate segment indices
+            starting from zero (i.e. 0.d2, 1.d2, ...)
+
+        Returns
+        -------
+        :obj:`MeshSegmentation`
+            A completed mesh segmentation.
+        """
+        mesh_seg = seg_file.SegFile(seg_filename).read(mesh)
+        if descriptor_dir is not None:
+            for i, seg in enumerate(mesh_seg.segments):
+                filename = os.path.join(descriptor_dir, '{}.d2'.format(i))
+                d2_descriptor = DescriptorFile(filename).read(seg.mesh)
+                seg.d2_descriptor = d2_descriptor
+        else:
+            for seg in mesh_seg.segments:
+                seg.compute_d2_descriptor()
+        return mesh_seg
 
 class GroupShapeSegmenter(object):
     """A segmenter for a group of similar shapes.
@@ -1470,21 +1539,29 @@ class GroupShapeSegmenter(object):
         return np.array(rows)
 
 def main():
-    #filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 25)]
+    from meshpy import OffFile
+
+    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 23)]
+    cachedirs = ['./segmentations/cup/{}'.format(i) for i in range(21, 23)]
     #filenames = ['./meshes/fourleg/{}.off'.format(i) for i in range(381, 391)]
     #filenames = ['./meshes/chair/{}.off'.format(i) for i in range(101, 111)]
     #filenames = ['./meshes/bearing/{}.off'.format(i) for i in range(341, 361)]
     #filenames = ['./meshes/plier/{}.off'.format(i) for i in range(201, 221)]
-    filenames = ['./meshes/airplane/{}.off'.format(i) for i in range(61, 81)]
+    #filenames = ['./meshes/airplane/{}.off'.format(i) for i in range(61, 81)]
     #filenames = ['./meshes/glasses/{}.off'.format(i) for i in range(41, 61)]
     #filenames = ['./meshes/hq/{}.off'.format(i) for i in range(21, 31)]
     meshes = [OffFile(f).read() for f in filenames]
 
+    #gss = GroupShapeSegmenter(meshes, max_n_segs=10)
+    #segmentations = gss.segmentations
+    #for segmentation, cachedir in zip(segmentations, cachedirs):
+    #    segmentation.show()
+    #    segmentation.write(os.path.join(cachedir, 'segmentation.seg'), cachedir)
+    for mesh, cachedir in zip(meshes, cachedirs):
+        seg = MeshSegmentation.load(mesh, os.path.join(cachedir, 'segmentation.seg'), cachedir)
+        seg.show()
 
-    gss = GroupShapeSegmenter(meshes, max_n_segs=10)
-    segmentations = gss.segmentations
-    for segmentation in segmentations:
-        segmentation.show()
+
 
 if __name__ == '__main__':
     main()

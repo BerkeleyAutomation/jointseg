@@ -4,11 +4,10 @@ Author: Matthew Matl
 """
 import os
 
-from segmentation import Segmentation
+from segmentation import MeshSegment, MeshSegmentation
 
 class SegFile:
-    """
-    A mesh segmentation file reader and writer.
+    """A mesh segmentation file reader and writer.
     """
 
     def __init__(self, filepath):
@@ -24,8 +23,8 @@ class SegFile:
         ValueError
             If the file extension is not .seg.
         """
-        self.filepath_ = filepath
-        file_root, file_ext = os.path.splitext(self.filepath_)
+        self._filepath = filepath
+        file_root, file_ext = os.path.splitext(self._filepath)
         if file_ext != '.seg':
             raise ValueError('Extension %s invalid for SEGs' %(file_ext))
 
@@ -33,7 +32,7 @@ class SegFile:
     def filepath(self):
         """:obj:`str` : The full path to the .seg file associated with this reader/writer.
         """
-        return self.filepath_
+        return self._filepath
 
     def read(self, mesh):
         """Reads in the .seg file and returns a Segmentation using the
@@ -46,10 +45,10 @@ class SegFile:
 
         Returns
         -------
-        :obj:`Segmentation`
+        :obj:`MeshSegmentation`
             A segmentation created from the given mesh and the .seg file.
         """
-        f = open(self.filepath_, 'r')
+        f = open(self._filepath, 'r')
 
         face_to_segment = []
         for line in f:
@@ -59,18 +58,33 @@ class SegFile:
                 face_to_segment.append(val)
         f.close()
 
-        return Segmentation(mesh, face_to_segment)
+        n_segs = max(face_to_segment) + 1
 
-    def write(self, seg):
+        seg_tri_inds = [[] for i in range(n_segs)]
+
+        for tri_ind, seg_ind in enumerate(face_to_segment):
+            seg_tri_inds[seg_ind].append(tri_ind)
+
+        segments = []
+        for tri_inds in seg_tri_inds:
+            segments.append(MeshSegment(tri_inds, mesh))
+
+        return MeshSegmentation(mesh, segments)
+
+    def write(self, segmentation):
         """Writes a Segmentation object out to a .seg file format.
 
         Parameters
         ----------
-        seg : :obj:`Segmentation`
+        segmentation : :obj:`MeshSegmentation`
             A segmentation of a 3D mesh.
         """
-        f = open(self.filepath_, 'w')
-        seg_ids = seg.get_face_map()
+        seg_ids = [0 for i in range(len(segmentation.mesh.triangles))]
+        for i, seg in enumerate(segmentation.segments):
+            for tri_ind in seg.tri_inds:
+                seg_ids[tri_ind] = i
+
+        f = open(self._filepath, 'w')
 
         for seg_id in seg_ids:
             f.write('%d\n' %(seg_id))

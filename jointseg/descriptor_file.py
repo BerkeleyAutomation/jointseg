@@ -62,8 +62,6 @@ class DescriptorFile:
             if len(vals) > 0:
                 if vals[0] == 'n_samples':
                     n_samples = int(vals[1])
-                elif vals[0] == 'n_bins':
-                    n_bins = int(vals[1])
                 elif vals[0] == 'n_verts':
                     n_verts = int(vals[1])
                 elif vals[0] == 'evals':
@@ -78,7 +76,7 @@ class DescriptorFile:
         n_rows = len(verts)/n_verts
         verts = verts.reshape((n_rows, n_verts))
 
-        return D2Descriptor(mesh, n_samples, n_bins, n_verts, verts, evals)
+        return D2Descriptor(mesh, n_samples, n_verts, verts, evals)
 
     def write(self, d):
         """Writes a D2Descriptor object out to a .d2 file format.
@@ -91,10 +89,9 @@ class DescriptorFile:
         f = open(self.filepath_, 'w')
 
         f.write('n_samples %d\n' % d._n_samples)
-        f.write('n_bins %d\n' % d._n_bins)
         f.write('n_verts %d\n' % d._n_verts)
         f.write('evals %f %f %f\n' % (d._orig_evals[0], d._orig_evals[1], d._orig_evals[2]))
-        for vert_list in d._verts:
+        for vert_list in d.verts:
             for vert in vert_list:
                 f.write('%f\n' %(vert))
 
