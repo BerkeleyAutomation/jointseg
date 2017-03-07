@@ -1538,30 +1538,3 @@ class GroupShapeSegmenter(object):
             rows.append(A[ind])
         return np.array(rows)
 
-def main():
-    from meshpy import OffFile
-
-    filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 23)]
-    cachedirs = ['./segmentations/cup/{}'.format(i) for i in range(21, 23)]
-    #filenames = ['./meshes/fourleg/{}.off'.format(i) for i in range(381, 391)]
-    #filenames = ['./meshes/chair/{}.off'.format(i) for i in range(101, 111)]
-    #filenames = ['./meshes/bearing/{}.off'.format(i) for i in range(341, 361)]
-    #filenames = ['./meshes/plier/{}.off'.format(i) for i in range(201, 221)]
-    #filenames = ['./meshes/airplane/{}.off'.format(i) for i in range(61, 81)]
-    #filenames = ['./meshes/glasses/{}.off'.format(i) for i in range(41, 61)]
-    #filenames = ['./meshes/hq/{}.off'.format(i) for i in range(21, 31)]
-    meshes = [OffFile(f).read() for f in filenames]
-
-    #gss = GroupShapeSegmenter(meshes, max_n_segs=10)
-    #segmentations = gss.segmentations
-    #for segmentation, cachedir in zip(segmentations, cachedirs):
-    #    segmentation.show()
-    #    segmentation.write(os.path.join(cachedir, 'segmentation.seg'), cachedir)
-    for mesh, cachedir in zip(meshes, cachedirs):
-        seg = MeshSegmentation.load(mesh, os.path.join(cachedir, 'segmentation.seg'), cachedir)
-        seg.show()
-
-
-
-if __name__ == '__main__':
-    main()
