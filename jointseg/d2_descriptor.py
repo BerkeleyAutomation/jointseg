@@ -104,9 +104,9 @@ class D2Descriptor(object):
         self._verts = []
 
         o1_mesh = self._mesh.copy()
-        o2_mesh = self._mesh.copy()
-        o3_mesh = self._mesh.copy()
         self._orig_evals = o1_mesh.scale_principal_eigenvalues([1.0])
+        o2_mesh = o1_mesh.copy()
+        o3_mesh = o1_mesh.copy()
         o2_mesh.scale_principal_eigenvalues([1.0, 1.0])
         o3_mesh.scale_principal_eigenvalues([1.0, 1.0, 1.0])
 
