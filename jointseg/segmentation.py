@@ -1427,16 +1427,15 @@ class GroupShapeSegmenter(object):
                 if dist != 0.0:
                     distances.append(dist)
         sigdist = 2*np.median(distances)**2
-        #sigratio = np.median(ratios)**2
 
-        print np.mean(ratios)
-        print np.std(ratios)
-        sigratio = (np.log(4.0)/(np.mean(ratios) - np.std(ratios))**2)
-        print sigratio
+        sigratio = (np.log(8.0)/(np.mean(ratios) - np.std(ratios))**2)
 
         # Compute weights for each segment
         for seg in seg_to_min_dists:
             seg.weight = 0.0
+
+            self_cut_term = 0.0
+
             for shape, tup in seg_to_min_dists[seg].iteritems():
                 other_seg, dist = tup
                 cut_cost = other_seg.cut_cost
@@ -1449,9 +1448,13 @@ class GroupShapeSegmenter(object):
                 weight = dist_term * cut_term
 
                 # TODO HERE
-                if tup[0] != seg:
-                    weight *= 1.0 / np.sqrt(len(self._shapes))
+                if other_seg == seg:
+                    self_cut_term = cut_term
                 seg.weight += weight
+
+            if seg.cut_cost / seg.perimeter > np.mean(ratios) + np.std(ratios):
+                seg.weight = 0.0
+            seg.weight *= self_cut_term
 
         # Compute segmentations for each shape
         self._segmentations = self._compute_segmentations()
@@ -1486,7 +1489,8 @@ class GroupShapeSegmenter(object):
         """
         final_segments = []
 
-        wseg = np.array([seg.weight * seg.area / shape.mesh.surface_area() for seg in shape.segments])
+        #wseg = np.array([seg.weight * seg.area / shape.mesh.surface_area() for seg in shape.segments])
+        wseg = np.array([seg.weight * np.sqrt(seg.area / shape.mesh.surface_area()) for seg in shape.segments])
 
         # Generate A and B matrices -- Ax = B
         #   These form the covering constraints for our generated segments.
@@ -1542,35 +1546,4 @@ class GroupShapeSegmenter(object):
         for ind in rowinds:
             rows.append(A[ind])
         return np.array(rows)
-
-from meshpy import OffFile
-def main():
-
-    #filenames = ['./meshes/cup/{}.off'.format(i) for i in range(21, 41)]
-    #cachedirs = ['./segmentations/cup/{}'.format(i) for i in range(21, 23)]
-    #filenames = ['./meshes/fourleg/{}.off'.format(i) for i in range(381, 391)]
-    #filenames = ['./meshes/chair/{}.off'.format(i) for i in range(101, 111)]
-    #filenames = ['./meshes/bearing/{}.off'.format(i) for i in range(341, 361)]
-    filenames = ['./meshes/plier/{}.off'.format(i) for i in range(201, 221)]
-    #filenames = ['./meshes/airplane/{}.off'.format(i) for i in range(61, 81)]
-    #filenames = ['./meshes/glasses/{}.off'.format(i) for i in range(41, 61)]
-    #filenames = ['./meshes/hq/{}.off'.format(i) for i in range(21, 31)]
-    meshes = [OffFile(f).read() for f in filenames]
-
-    gss = GroupShapeSegmenter(meshes, max_n_segs=10)
-    segmentations = gss.segmentations
-    for segmentation in segmentations:
-        segmentation.show()
-    #for segmentation, cachedir in zip(segmentations, cachedirs):
-    #    segmentation.show()
-    #    segmentation.write(os.path.join(cachedir, 'segmentation.seg'), cachedir)
-    #for mesh, cachedir in zip(meshes, cachedirs):
-    #    seg = MeshSegmentation.load(mesh, os.path.join(cachedir, 'segmentation.seg'), cachedir)
-    #    seg.show()
-    #    for segment in seg.segments:
-    #        segment.d2_descriptor.plot()
-
-
-if __name__ == '__main__':
-    main()
 
