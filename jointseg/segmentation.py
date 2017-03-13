@@ -1220,7 +1220,7 @@ class MeshSegment(object):
             The D2 shape descriptor for this segment, if it was already
             computed.
         """
-        self._tri_inds = tri_inds
+        self._tri_inds = set(tri_inds)
         self._mesh = MeshSegment._create_mesh(orig_mesh, tri_inds)
         self._d2_descriptor = d2_descriptor
 
@@ -1232,7 +1232,7 @@ class MeshSegment(object):
 
     @property
     def tri_inds(self):
-        """:obj:`list` of int : A list of the triangle indices of the original mesh
+        """:obj:`set` of int : A list of the triangle indices of the original mesh
             that are present in this segment.
         """
         return self._tri_inds
@@ -1306,12 +1306,21 @@ class MeshSegmentation(object):
         """
         return self._segments
 
-    def show(self):
+    def show(self, labels=None):
         """Display the MeshSegmentation with mayavi.
+
+        Parameters
+        ----------
+        labels : :obj:`list` of int
+            Integer labels for each segment. Segments with identical labels
+            will be colored identically.
         """
+        if labels is None:
+            labels = range(len(self.segments))
+
         Visualizer3D.figure(size=(400, 400))
-        for i, segment in enumerate(self.segments):
-            Visualizer3D.mesh(segment.mesh, style='surface', color=indexed_color(i))
+        for label, segment in zip(labels, self.segments):
+            Visualizer3D.mesh(segment.mesh, style='surface', color=indexed_color(label+2))
         Visualizer3D.show()
 
     def write(self, seg_filename, descriptor_dir=None):
@@ -1428,7 +1437,7 @@ class GroupShapeSegmenter(object):
                     distances.append(dist)
         sigdist = 2*np.median(distances)**2
 
-        sigratio = (np.log(8.0)/(np.mean(ratios) - np.std(ratios))**2)
+        sigratio = (np.log(4.0)/(np.mean(ratios) - np.std(ratios))**2)
 
         # Compute weights for each segment
         for seg in seg_to_min_dists:
